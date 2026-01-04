@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta
+			name="viewport"
+			content="width=device-width, initial-scale=1.0"
+		/>
+		<title>Счетчик зарплаты</title>
+	</head>
+	<style>
+		*::selection {
+			background-color: #383838;
+		}
+
+		body {
+			background-color: #424242;
+			font-family: Arial, sans-serif;
+			margin: 0;
+		}
+
+		main {
+			margin: 50px auto 0;
+			display: table;
+			padding: 20px 50px;
+			background-color: #313131;
+			border-radius: 10px;
+			box-shadow: 0 4px 6px #0000004b;
+		}
+
+		p {
+			font-size: 35px;
+			color: #a5a5a5;
+			text-align: center;
+			margin: 20px 0;
+		}
+
+		#info {
+			display: block;
+			font-size: 24px;
+			color: #b0b0b0;
+			margin-bottom: 10px;
+		}
+
+		#salary {
+			font-weight: 600;
+		}
+
+		.salary-during-work {
+			color: #4caf50;
+		}
+
+		.salary-after-work {
+			color: #2196f3;
+		}
+
+		.salary-before-work {
+			color: #757575;
+		}
+	</style>
+	<body>
+		<main>
+			<p id="clock"></p>
+
+			<p>
+				<span id="info"></span>
+
+				<span id="salary"></span>
+			</p>
+		</main>
+
+		<script>
+			var WORK_START_HOUR = 8; // Начало рабочего дня (часы)
+			var WORK_START_MINUTE = 15; // Начало рабочего дня (минуты)
+			var WORK_END_HOUR = 17; // Конец рабочего дня (часы)
+			var WORK_END_MINUTE = 15; // Конец рабочего дня (минуты)
+			var WEEKDAY_SALARY_PER_MINUTE = 2.7; // Зарплата в миннуту в будни (в рублях)
+			var WEEKEND_SALARY_PER_MINUTE = 3.3; // Зарплата в миннуту в выходные (в рублях)
+
+			var MESSAGES = {
+				DURING: 'Сегодняшний заработок (',
+				AFTER: 'Рабочий день закончен. Заработано:',
+				BEFORE: 'Рабочий день еще не начался.',
+			};
+
+			function formatCurrency(amount) {
+				var parts = amount.toFixed(2).split('.');
+				parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+				return parts.join('.') + ' ₽';
+			}
+
+			function padZero(num) {
+				return num < 10 ? '0' + num : num.toString();
+			}
+
+			function calculateSalary() {
+				var infoElement = document.getElementById('info');
+				var salaryElement = document.getElementById('salary');
+				var clockElement = document.getElementById('clock');
+
+				var now = new Date();
+				var hours = now.getHours();
+				var minutes = now.getMinutes();
+				var seconds = now.getSeconds();
+				var day = now.getDay();
+				var totalMinutesNow = hours * 60 + minutes + seconds / 60;
+				var workStartInMinutes = WORK_START_HOUR * 60 + WORK_START_MINUTE;
+				var workEndInMinutes = WORK_END_HOUR * 60 + WORK_END_MINUTE;
+				var isWeekendDay = day === 6 || day === 0;
+				var todaysSalaryPerMinute = isWeekendDay
+					? WEEKEND_SALARY_PER_MINUTE
+					: WEEKDAY_SALARY_PER_MINUTE;
+
+				clockElement.textContent =
+					padZero(hours) + ':' + padZero(minutes) + ':' + padZero(seconds);
+
+				if (
+					totalMinutesNow >= workStartInMinutes &&
+					totalMinutesNow < workEndInMinutes
+				) {
+					var minutesSinceWorkStart = totalMinutesNow - workStartInMinutes;
+					var salaryEarned = minutesSinceWorkStart * todaysSalaryPerMinute;
+
+					infoElement.textContent =
+						MESSAGES.DURING + (isWeekendDay ? 'выходной' : 'будний') + '):';
+					salaryElement.textContent = formatCurrency(salaryEarned);
+					salaryElement.className = 'salary-during-work';
+				} else if (totalMinutesNow >= workEndInMinutes) {
+					var totalWorkMinutes = workEndInMinutes - workStartInMinutes;
+					var totalSalary = totalWorkMinutes * todaysSalaryPerMinute;
+
+					infoElement.textContent = MESSAGES.AFTER;
+					salaryElement.textContent = formatCurrency(totalSalary);
+					salaryElement.className = 'salary-after-work';
+				} else {
+					infoElement.textContent = MESSAGES.BEFORE;
+					salaryElement.textContent = '0.00 ₽';
+					salaryElement.className = 'salary-before-work';
+				}
+
+				var millisecondsToNextSecond = 1000 - now.getMilliseconds();
+				setTimeout(calculateSalary, millisecondsToNextSecond);
+			}
+
+			calculateSalary();
+		</script>
+	</body>
+</html>
