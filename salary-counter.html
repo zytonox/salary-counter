@@ -35,11 +35,10 @@
 			margin: 20px 0;
 		}
 
-		#info {
+		#info,
+		#lunch-info {
 			display: block;
 			font-size: 24px;
-			color: #b0b0b0;
-			margin-bottom: 10px;
 		}
 
 		#salary {
@@ -48,6 +47,10 @@
 
 		.salary-during-work {
 			color: #4caf50;
+		}
+
+		.salary-lunch-break {
+			color: #ff9800;
 		}
 
 		.salary-after-work {
@@ -62,40 +65,140 @@
 		<main>
 			<p id="clock"></p>
 
-			<p>
-				<span id="info"></span>
+			<div>
+				<p id="info"></p>
 
-				<span id="salary"></span>
-			</p>
+				<p id="salary"></p>
+
+				<p id="lunch-info"></p>
+			</div>
 		</main>
 
 		<script>
+			/* === НАСТРОЙКИ === */
+			// 1. Рабочее время
 			var WORK_START_HOUR = 8; // Начало рабочего дня (часы)
 			var WORK_START_MINUTE = 15; // Начало рабочего дня (минуты)
 			var WORK_END_HOUR = 17; // Конец рабочего дня (часы)
 			var WORK_END_MINUTE = 15; // Конец рабочего дня (минуты)
+
+			// 2. Обеденный перерыв
+			var HAS_LUNCH_BREAK = true; // Рабочий день с обедом - true, без обеда - false
+			var IS_LUNCH_PAID = false; // Обед оплачивается - true, не оплавичается - false (игнорируется, если рабочий день без обеда)
+			var LUNCH_START_HOUR = 12; // Начало обеда (часы)
+			var LUNCH_START_MINUTE = 15; // Начало обеда (минуты)
+			var LUNCH_END_HOUR = 13; // Конец обеда (часы)
+			var LUNCH_END_MINUTE = 15; // Конец обеда (минуты)
+
+			// 3. Ставки
 			var WEEKDAY_SALARY_PER_MINUTE = 2.7; // Зарплата в миннуту в будни (в рублях)
 			var WEEKEND_SALARY_PER_MINUTE = 3.3; // Зарплата в миннуту в выходные (в рублях)
+			/* === КОНЕЦ НАСТРОЕК === */
+
+			LUNCH_END_HOUR = HAS_LUNCH_BREAK ? LUNCH_END_HOUR : LUNCH_START_HOUR;
+			LUNCH_END_MINUTE = HAS_LUNCH_BREAK
+				? LUNCH_END_MINUTE
+				: LUNCH_START_MINUTE;
+
+			var LUNCH_DURATION_IN_MINUTES =
+				LUNCH_END_HOUR * 60 +
+				LUNCH_END_MINUTE -
+				(LUNCH_START_HOUR * 60 + LUNCH_START_MINUTE);
+
+			var SHOULD_SHOW_LUNCH_BREAK =
+				HAS_LUNCH_BREAK && LUNCH_DURATION_IN_MINUTES > 0;
 
 			var MESSAGES = {
 				DURING: 'Сегодняшний заработок (',
 				AFTER: 'Рабочий день закончен. Заработано:',
 				BEFORE: 'Рабочий день еще не начался.',
+				LUNCH: 'Обеденный перерыв. Заработано:',
+				LUNCH_INFO: 'Обед заканчивается через:',
+				WEEKDAY: 'будний',
+				WEEKEND: 'выходной',
+				CURRENCY: '₽',
 			};
 
 			function formatCurrency(amount) {
 				var parts = amount.toFixed(2).split('.');
-				parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
-				return parts.join('.') + ' ₽';
+				var integerPart = parts[0];
+				var result = '';
+
+				for (var i = integerPart.length; i > 0; i -= 3) {
+					var chunk = integerPart.substring(Math.max(0, i - 3), i);
+					result = chunk + (result ? ' ' : '') + result;
+				}
+
+				return result + '.' + parts[1] + ' ' + MESSAGES.CURRENCY;
 			}
 
-			function padZero(num) {
-				return num < 10 ? '0' + num : num.toString();
+			function padZero(number) {
+				return number < 10 ? '0' + number : number.toString();
 			}
 
-			function calculateSalary() {
+			function calculateSalary(
+				currentTimeInMinutes,
+				workStartInMinutes,
+				todaysSalaryPerMinute,
+				lunchDurationInMinutes
+			) {
+				var workedMinutes = currentTimeInMinutes - workStartInMinutes;
+
+				if (lunchDurationInMinutes) {
+					workedMinutes -= lunchDurationInMinutes;
+				}
+
+				var salaryEarned = workedMinutes * todaysSalaryPerMinute;
+
+				return salaryEarned;
+			}
+
+			function updateElement(
+				infoMessage,
+				salaryMessage,
+				salaryClass,
+				lunchInfoMessage
+			) {
 				var infoElement = document.getElementById('info');
 				var salaryElement = document.getElementById('salary');
+				var lunchInfo = document.getElementById('lunch-info');
+
+				infoElement.textContent = infoMessage;
+				salaryElement.textContent = formatCurrency(salaryMessage);
+				salaryElement.className = salaryClass;
+				lunchInfo.textContent = lunchInfoMessage;
+			}
+
+			function getLunchRemainingText(
+				hours,
+				minutes,
+				seconds,
+				lunchStart,
+				lunchDuration
+			) {
+				var currentTimeInSeconds = hours * 3600 + minutes * 60 + seconds;
+				var lunchStartInSeconds = lunchStart * 60;
+				var lunchDurationInSeconds = lunchDuration * 60;
+
+				var secondsPassed = currentTimeInSeconds - lunchStartInSeconds;
+				var secondsRemaining = lunchDurationInSeconds - secondsPassed;
+
+				var remainingHours = Math.floor(secondsRemaining / 3600);
+				var remainingMinutes = Math.floor((secondsRemaining % 3600) / 60);
+				var remainingSeconds = secondsRemaining % 60;
+
+				return (
+					MESSAGES.LUNCH_INFO +
+					' ' +
+					padZero(remainingHours) +
+					':' +
+					padZero(remainingMinutes) +
+					':' +
+					padZero(remainingSeconds)
+				);
+			}
+
+			function startSalaryCounter() {
 				var clockElement = document.getElementById('clock');
 
 				var now = new Date();
@@ -103,9 +206,15 @@
 				var minutes = now.getMinutes();
 				var seconds = now.getSeconds();
 				var day = now.getDay();
+
 				var totalMinutesNow = hours * 60 + minutes + seconds / 60;
+
 				var workStartInMinutes = WORK_START_HOUR * 60 + WORK_START_MINUTE;
 				var workEndInMinutes = WORK_END_HOUR * 60 + WORK_END_MINUTE;
+
+				var lunchStartInMinutes = LUNCH_START_HOUR * 60 + LUNCH_START_MINUTE;
+				var lunchEndInMinutes = LUNCH_END_HOUR * 60 + LUNCH_END_MINUTE;
+
 				var isWeekendDay = day === 6 || day === 0;
 				var todaysSalaryPerMinute = isWeekendDay
 					? WEEKEND_SALARY_PER_MINUTE
@@ -115,34 +224,95 @@
 					padZero(hours) + ':' + padZero(minutes) + ':' + padZero(seconds);
 
 				if (
+					// До обеда
 					totalMinutesNow >= workStartInMinutes &&
+					totalMinutesNow < lunchStartInMinutes
+				) {
+					var salaryEarned = calculateSalary(
+						totalMinutesNow,
+						workStartInMinutes,
+						todaysSalaryPerMinute
+					);
+
+					updateElement(
+						MESSAGES.DURING +
+							(isWeekendDay ? MESSAGES.WEEKEND : MESSAGES.WEEKDAY) +
+							'):',
+						salaryEarned,
+						'salary-during-work',
+						''
+					);
+				} else if (
+					// Обед
+					SHOULD_SHOW_LUNCH_BREAK &&
+					totalMinutesNow >= lunchStartInMinutes &&
+					totalMinutesNow < lunchEndInMinutes
+				) {
+					var minutesForCalculation = IS_LUNCH_PAID
+						? totalMinutesNow
+						: lunchStartInMinutes;
+
+					var salaryEarned = calculateSalary(
+						minutesForCalculation,
+						workStartInMinutes,
+						todaysSalaryPerMinute
+					);
+
+					var lunchRemainingText = getLunchRemainingText(
+						hours,
+						minutes,
+						seconds,
+						lunchStartInMinutes,
+						LUNCH_DURATION_IN_MINUTES
+					);
+
+					updateElement(
+						MESSAGES.LUNCH,
+						salaryEarned,
+						'salary-lunch-break',
+						lunchRemainingText
+					);
+				} else if (
+					// После обеда
+					totalMinutesNow >= lunchEndInMinutes &&
 					totalMinutesNow < workEndInMinutes
 				) {
-					var minutesSinceWorkStart = totalMinutesNow - workStartInMinutes;
-					var salaryEarned = minutesSinceWorkStart * todaysSalaryPerMinute;
+					var salaryEarned = calculateSalary(
+						totalMinutesNow,
+						workStartInMinutes,
+						todaysSalaryPerMinute,
+						IS_LUNCH_PAID ? 0 : LUNCH_DURATION_IN_MINUTES
+					);
 
-					infoElement.textContent =
-						MESSAGES.DURING + (isWeekendDay ? 'выходной' : 'будний') + '):';
-					salaryElement.textContent = formatCurrency(salaryEarned);
-					salaryElement.className = 'salary-during-work';
-				} else if (totalMinutesNow >= workEndInMinutes) {
-					var totalWorkMinutes = workEndInMinutes - workStartInMinutes;
-					var totalSalary = totalWorkMinutes * todaysSalaryPerMinute;
+					updateElement(
+						MESSAGES.DURING +
+							(isWeekendDay ? MESSAGES.WEEKEND : MESSAGES.WEEKDAY) +
+							'):',
+						salaryEarned,
+						'salary-during-work',
+						''
+					);
+				} else if (
+					// После рабочего дня
+					totalMinutesNow >= workEndInMinutes
+				) {
+					var totalSalary = calculateSalary(
+						workEndInMinutes,
+						workStartInMinutes,
+						todaysSalaryPerMinute
+					);
 
-					infoElement.textContent = MESSAGES.AFTER;
-					salaryElement.textContent = formatCurrency(totalSalary);
-					salaryElement.className = 'salary-after-work';
+					updateElement(MESSAGES.AFTER, totalSalary, 'salary-after-work', '');
 				} else {
-					infoElement.textContent = MESSAGES.BEFORE;
-					salaryElement.textContent = '0.00 ₽';
-					salaryElement.className = 'salary-before-work';
+					// До начала работы
+					updateElement(MESSAGES.BEFORE, 0, 'salary-before-work', '');
 				}
 
 				var millisecondsToNextSecond = 1000 - now.getMilliseconds();
-				setTimeout(calculateSalary, millisecondsToNextSecond);
+				setTimeout(startSalaryCounter, millisecondsToNextSecond);
 			}
 
-			calculateSalary();
+			startSalaryCounter();
 		</script>
 	</body>
 </html>
